@@ -1,0 +1,38 @@
+# YOLOv8 fine-tuning config for defect detection
+model:
+  backbone: yolov8m.pt        # use yolov8n.pt for edge-constrained training runs
+  num_classes: 8               # update to match your merged defect taxonomy
+
+data:
+  yaml_path: data/processed/mvtec_defects.yaml
+  img_size: 640
+
+train:
+  epochs: 150
+  batch_size: 16
+  optimizer: AdamW
+  lr0: 0.001
+  patience: 30                 # early stopping
+  device: 0                    # GPU index, or 'cpu'
+  project: runs/detect
+  name: visionguard_yolov8
+
+augmentation:
+  mosaic: 1.0
+  mixup: 0.1
+  degrees: 5.0
+  translate: 0.1
+  scale: 0.3
+  fliplr: 0.5
+  hsv_h: 0.015
+  hsv_s: 0.5
+  hsv_v: 0.3
+
+loss:
+  # YOLOv8 default box (CIoU) + cls + dfl; class-imbalance handled via
+  # oversampling rare-defect images in the dataloader (see src/detection/train_yolo.py)
+  cls_pw: 1.0
+
+logging:
+  mlflow_experiment: visionguard-detection
+  wandb_project: null           # set to enable W&B logging instead

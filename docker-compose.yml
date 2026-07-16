@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.deploy
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./runs:/app/runs
+    environment:
+      - VISIONGUARD_WEIGHTS=runs/detect/visionguard_yolov8/weights/best.pt
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.deploy
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./runs:/app/runs
+    environment:
+      - VISIONGUARD_WEIGHTS=runs/detect/visionguard_yolov8/weights/best.pt

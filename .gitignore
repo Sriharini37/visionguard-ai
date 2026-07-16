@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+runs/
+mlruns/
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.pt
+*.onnx
+*.engine
+*.cache
+.DS_Store
+.streamlit/

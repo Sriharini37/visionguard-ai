@@ -1,0 +1,11 @@
+method: ewc                   # options: ewc, replay, ewc_replay
+ewc_lambda: 400                # regularization strength
+replay_buffer_size: 200        # samples per old task retained
+base_checkpoint: runs/detect/visionguard_yolov8/weights/best.pt
+new_task_data: data/processed/new_defect_class
+epochs: 20
+lr: 0.0001
+eval_old_tasks: true
+acceptable_forgetting_pct: 3.0  # target: <3% accuracy drop on old classes
+checkpoint_dir: runs/continual
+mlflow_experiment: visionguard-continual

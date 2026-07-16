@@ -1,0 +1,11 @@
+backbone: resnet50
+projection_dim: 128
+batch_size: 256
+epochs: 100
+lr: 0.3
+weight_decay: 1e-6
+temperature: 0.5
+unlabeled_data_dir: data/raw/unlabeled_production_images
+img_size: 224
+checkpoint_dir: runs/simclr
+mlflow_experiment: visionguard-simclr

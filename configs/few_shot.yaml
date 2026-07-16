@@ -1,0 +1,12 @@
+embedding_backbone: resnet18     # can be replaced with SimCLR-pretrained checkpoint
+pretrained_encoder_path: null    # e.g. runs/simclr/best_encoder.pt
+n_way: 5
+k_shot: 5
+q_query: 15
+episodes_train: 10000
+episodes_eval: 1000
+lr: 0.001
+support_set_dir: data/few_shot_support_sets
+img_size: 224
+checkpoint_dir: runs/few_shot
+mlflow_experiment: visionguard-few-shot
