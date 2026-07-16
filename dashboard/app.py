@@ -2,10 +2,11 @@
 VisionGuard AI — Streamlit Dashboard
 
 Two modes:
-  * DEMO MODE (default): synthesizes realistic defect imagery + detections so
-    the full UX can be shown live in an interview with zero setup.
-  * MODEL MODE: point it at a real trained YOLOv8 checkpoint (.pt) and it
-    runs actual inference + real Grad-CAM.
+  * DEMO MODE (default, always available): synthesizes realistic defect
+    imagery + detections so the full UX can be shown live with zero setup.
+  * REAL MODEL MODE: only offered when a live FastAPI backend with loaded
+    weights is actually reachable. On the public cloud deployment (no API
+    attached), this option never appears — so there is nothing to error on.
 
 Run:
     streamlit run dashboard/app.py
@@ -23,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFilter
 st.set_page_config(page_title="VisionGuard AI", page_icon="🔍", layout="wide")
 
 DEFECT_CLASSES = ["scratch", "dent", "crack", "discoloration", "solder_bridge", "missing_component"]
+DEFAULT_API_URL = "http://localhost:8000"
 
 
 # --------------------------------------------------------------------------
@@ -30,6 +32,8 @@ DEFECT_CLASSES = ["scratch", "dent", "crack", "discoloration", "solder_bridge", 
 # --------------------------------------------------------------------------
 if "history" not in st.session_state:
     st.session_state.history = []  # list of dicts: timestamp, class, confidence, verdict
+if "api_url" not in st.session_state:
+    st.session_state.api_url = DEFAULT_API_URL
 
 
 # --------------------------------------------------------------------------
@@ -88,35 +92,59 @@ def run_demo_inference(seed: int, defect_rate: float):
 
 
 # --------------------------------------------------------------------------
+# API availability probe — cached briefly so every rerun doesn't re-dial
+# out and add latency, especially on the public cloud deployment where it
+# will always fail.
+# --------------------------------------------------------------------------
+@st.cache_data(ttl=15, show_spinner=False)
+def probe_api(url: str) -> bool:
+    try:
+        resp = requests.get(f"{url}/health", timeout=1.5)
+        resp.raise_for_status()
+        return bool(resp.json().get("model_loaded", False))
+    except requests.exceptions.RequestException:
+        return False
+
+
+# --------------------------------------------------------------------------
 # Sidebar — controls
 # --------------------------------------------------------------------------
 st.sidebar.title("🔍 VisionGuard AI")
 st.sidebar.caption("Autonomous defect detection & explainable QA")
 
-mode = st.sidebar.radio("Mode", ["Demo (synthetic)", "Real model (upload weights)"], index=0)
+api_is_up = probe_api(st.session_state.api_url)
+
+mode_options = ["Demo (synthetic)"]
+if api_is_up:
+    mode_options.append("Real model (live API)")
+
+mode = st.sidebar.radio("Mode", mode_options, index=0)
+
 domain = st.sidebar.selectbox("Production line", ["Electronics (PCB)", "Pharmaceutical tablets",
                                                     "Textile/apparel", "Solar panels"])
 defect_rate = st.sidebar.slider("Simulated defect rate", 0.0, 1.0, 0.35, 0.05)
 show_gradcam = st.sidebar.checkbox("Show Grad-CAM overlay", value=True)
 alert_threshold = st.sidebar.slider("Alert if defect rate/hour exceeds", 0.0, 1.0, 0.5, 0.05)
 
-api_url = "http://localhost:8000"
-api_is_up = False
+# uploaded_image is ALWAYS defined (None when not in Real mode), so
+# downstream code never needs a fragile 'in dir()' / NameError-guard check.
+uploaded_image = None
+api_url = st.session_state.api_url
+
 if mode.startswith("Real"):
-    api_url = st.sidebar.text_input("API URL", value="http://localhost:8000")
+    api_url = st.sidebar.text_input("API URL", value=st.session_state.api_url)
+    if api_url != st.session_state.api_url:
+        st.session_state.api_url = api_url
+        probe_api.clear()  # force a fresh check against the new URL
     uploaded_image = st.sidebar.file_uploader("Upload a product image to inspect",
                                                type=["jpg", "jpeg", "png"])
-    try:
-        health = requests.get(f"{api_url}/health", timeout=2).json()
-        api_is_up = health.get("model_loaded", False)
-        if api_is_up:
-            st.sidebar.success("✅ Connected — real model loaded")
-        else:
-            st.sidebar.warning("API is reachable but no trained weights loaded yet. "
-                                "Train a model, then restart the API.")
-    except requests.exceptions.RequestException:
-        st.sidebar.error(f"Can't reach API at {api_url}. Start it with:\n"
-                          "`uvicorn api.main:app --port 8000`")
+    st.sidebar.success("✅ Connected — real model loaded")
+else:
+    st.sidebar.caption(
+        "Running in demo mode with synthetic data — no live model backend is "
+        "attached here. To run real inference, start the API locally with "
+        "`uvicorn api.main:app --port 8000` and reload this page."
+    )
 
 st.sidebar.divider()
 run_button = st.sidebar.button("▶ Inspect next item", use_container_width=True)
@@ -155,7 +183,7 @@ def call_real_api(api_url: str, image_bytes: bytes):
 
 
 def do_one_inspection():
-    if mode.startswith("Real") and api_is_up and 'uploaded_image' in dir() and uploaded_image is not None:
+    if mode.startswith("Real") and api_is_up and uploaded_image is not None:
         img, box, defect_type, confidence, verdict = call_real_api(api_url, uploaded_image.getvalue())
     else:
         seed = int(time.time() * 1000) % 100000
@@ -246,9 +274,11 @@ with st.expander("ℹ️ About this dashboard"):
     st.markdown("""
     - **Demo mode** synthesizes plausible product images, defect boxes, and Grad-CAM
       heatmaps so the full workflow can be demonstrated without GPU hardware or trained weights.
-    - **Real model mode** is wired for a genuine YOLOv8 `.pt` checkpoint — swap in
-      `src/explainability/gradcam_utils.py`'s `get_gradcam_overlay()` for real heatmaps,
-      and `ultralytics.YOLO(weights).predict()` for real detections.
+    - **Real model mode** only appears when a live FastAPI backend with loaded
+      weights is actually reachable — otherwise there's nothing to show, so it's
+      hidden rather than erroring. Swap in `src/explainability/gradcam_utils.py`'s
+      `get_gradcam_overlay()` for real heatmaps, and `ultralytics.YOLO(weights).predict()`
+      for real detections.
     - Alerts here are simulated in-app; `docs/architecture.md` documents the real
       Slack/email webhook integration point.
     """)
